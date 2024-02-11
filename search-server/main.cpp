@@ -69,7 +69,8 @@ public:
             if (word_to_document_relevance_[word].count(document_id)) {
                 continue;
             }
-            double tf = 1. * count(words.begin(), words.end(), word) / words.size();
+            double tf = static_cast<double>(count(words.begin(), words.end(), word))
+            / words.size();
             word_to_document_relevance_[word].insert({document_id, tf});
         }
     }
@@ -97,6 +98,7 @@ private:
     };
     
     map<string, map<int, double>> word_to_document_relevance_;
+    map<int, int> document_rating_;
     set<string> stop_words_;
     int document_count_ = 0;
 
@@ -131,7 +133,7 @@ private:
     }
 
     double CalculateIDF(const string& word) const {
-        return log(1. * document_count_
+        return log(static_cast<double>(document_count_)
         / word_to_document_relevance_.at(word).size());
     }
 
