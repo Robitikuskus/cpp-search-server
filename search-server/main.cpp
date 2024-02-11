@@ -114,10 +114,14 @@ private:
         return words;
     }
 
+    static bool IsMinusWord(const string& word) {
+        return !word.empty() && word[0] == '-';
+    }
+
     Query ParseQuery(const string& text) const {
         Query query;
         for (const string& word : SplitIntoWordsNoStop(text)) {
-            if (!word.empty() && word[0] == '-') {
+            if (IsMinusWord(word)) {
                 query.minus_words.insert(word.substr(1));
             } else {
                 query.plus_words.insert(word);
