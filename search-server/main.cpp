@@ -130,12 +130,17 @@ private:
         return query;
     }
 
+    double CalculateIDF(const string& word) const {
+        return log(1. * document_count_
+        / word_to_document_relevance_.at(word).size());
+    }
+
     vector<Document> FindAllDocuments(const Query& query) const {
         map<int, double> document_to_relevance;
         for (const auto& plus_word : query.plus_words) {
             if (word_to_document_relevance_.count(plus_word)) {
                 for (const auto& [id, tf] : word_to_document_relevance_.at(plus_word)) {
-                    double idf = log(1. * document_count_ / word_to_document_relevance_.at(plus_word).size());
+                    double idf = CalculateIDF(plus_word);
                     document_to_relevance[id] += idf * tf;
                 }
             }
