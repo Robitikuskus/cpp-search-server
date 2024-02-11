@@ -129,6 +129,9 @@ private:
     }
 
     static int CalculateAvarageDocumentRating(const vector<int>& ratings) {
+        if (!ratings.size()) {
+            return 0;
+        }
         return accumulate(ratings.begin(), ratings.end(), 0) / ratings.size();
     }
 
