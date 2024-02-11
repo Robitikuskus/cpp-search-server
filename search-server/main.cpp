@@ -7,6 +7,7 @@
 #include <cmath>
 #include <iostream>
 #include <map>
+#include <numeric>
 #include <set>
 #include <string>
 #include <utility>
@@ -50,7 +51,7 @@ vector<string> SplitIntoWords(const string& text) {
 }
 
 struct Document {
-    int id;
+    int id, rating;
     double relevance;
 };
 
@@ -114,6 +115,21 @@ private:
             }
         }
         return words;
+    }
+
+    static vector<int> ReadDocumentRatings() {
+        int n;
+        cin >> n;
+
+        vector<int> ratings(n);
+        for (int i = 0; i < n; ++i) {
+            cin >> ratings[i];
+        }
+        return ratings;
+    }
+
+    static int CalculateAvarageDocumentRating(const vector<int>& ratings) {
+        return accumulate(ratings.begin(), ratings.end(), 0) / ratings.size();
     }
 
     static bool IsMinusWord(const string& word) {
