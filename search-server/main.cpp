@@ -1,8 +1,3 @@
-// Решите загадку: Сколько чисел от 1 до 1000 содержат как минимум одну цифру 3?
-// Напишите ответ здесь: 271 =)
-
-// Закомитьте изменения и отправьте их в свой репозиторий.
-
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -25,9 +20,20 @@ string ReadLine() {
 
 int ReadLineWithNumber() {
     int result = 0;
-    cin >> result;
-    ReadLine();
+    cin >> result >> ws;
     return result;
+}
+
+vector<int> ReadLineWithNumbers() {
+    int n;
+    cin >> n;
+
+    vector<int> numbers(n);
+    for (auto& number : numbers) {
+        cin >> number;
+    }
+    cin >> ws;
+    return numbers;
 }
 
 vector<string> SplitIntoWords(const string& text) {
@@ -51,8 +57,9 @@ vector<string> SplitIntoWords(const string& text) {
 }
 
 struct Document {
-    int id, rating;
+    int id;
     double relevance;
+    int rating;
 };
 
 class SearchServer {
@@ -63,17 +70,19 @@ public:
         }
     }
     
-    void AddDocument(int document_id, const string& document) {
+    void AddDocument(int document_id, const string& document,
+                    const vector<int>& ratings) {
         ++document_count_;
         auto words = SplitIntoWordsNoStop(document);
         for (const auto& word : words) {
             if (word_to_document_relevance_[word].count(document_id)) {
                 continue;
             }
-            double tf = static_cast<double>(count(words.begin(), words.end(), word))
-            / words.size();
+            double tf = CalculateTF(words, word);
             word_to_document_relevance_[word].insert({document_id, tf});
         }
+
+        document_rating_[document_id] = ComputeAverageRating(ratings);
     }
     
     vector<Document> FindTopDocuments(const string& raw_query) const {
@@ -90,6 +99,10 @@ public:
             matched_documents.resize(MAX_RESULT_DOCUMENT_COUNT);
         }
         return matched_documents;
+    }
+
+    int GetDocumentRating(int document_id) {
+        return document_rating_[document_id];
     }
 
 private:
@@ -117,24 +130,6 @@ private:
         return words;
     }
 
-    static vector<int> ReadDocumentRatings() {
-        int n;
-        cin >> n;
-
-        vector<int> ratings(n);
-        for (int i = 0; i < n; ++i) {
-            cin >> ratings[i];
-        }
-        return ratings;
-    }
-
-    static int CalculateAvarageDocumentRating(const vector<int>& ratings) {
-        if (!ratings.size()) {
-            return 0;
-        }
-        return accumulate(ratings.begin(), ratings.end(), 0) / ratings.size();
-    }
-
     static bool IsMinusWord(const string& word) {
         return !word.empty() && word[0] == '-';
     }
@@ -149,6 +144,19 @@ private:
             }
         }
         return query;
+    }
+    
+    static int ComputeAverageRating(const vector<int>& ratings) {
+        if (!ratings.size()) {
+            return 0;
+        }
+        return accumulate(ratings.begin(), ratings.end(), 0)
+        / static_cast<int>(ratings.size());
+    }
+
+    static double CalculateTF(const vector<string>& words, const string& word) {
+        return static_cast<double>(count(
+                words.begin(), words.end(), word)) / words.size();
     }
 
     double CalculateIDF(const string& word) const {
@@ -177,7 +185,7 @@ private:
         
         vector<Document> documents;
         for (const auto& [id, relevance] : document_to_relevance) {
-            documents.push_back({id, relevance});
+            documents.push_back({id, relevance, document_rating_.at(id)});
         }
         
         return documents;
@@ -190,7 +198,10 @@ SearchServer CreateSearchServer() {
 
     const int document_count = ReadLineWithNumber();
     for (int document_id = 0; document_id < document_count; ++document_id) {
-        search_server.AddDocument(document_id, ReadLine());
+        string text = ReadLine();
+
+        vector<int> ratings = ReadLineWithNumbers();
+        search_server.AddDocument(document_id, text, ratings);
     }
     return search_server;
 }
@@ -199,8 +210,11 @@ int main() {
     const SearchServer search_server = CreateSearchServer();
 
     const string query = ReadLine();
-    for (const auto& [document_id, relevance] : search_server.FindTopDocuments(query)) {
-        cout << "{ document_id = "s << document_id << ", "
-             << "relevance = "s << relevance << " }"s << endl;
+    for (const auto& [document_id, relevance, rating] : search_server.FindTopDocuments(query)) {
+        cout << "{ document_id = "s << document_id << ", "s
+             << "relevance = "s << relevance << ", "s
+             << "rating = " << rating << " }"s << endl;
     }
+
+    return 0;
 }
