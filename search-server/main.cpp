@@ -2,7 +2,6 @@
 #include <cmath>
 #include <iostream>
 #include <map>
-#include <numeric>
 #include <set>
 #include <string>
 #include <utility>
@@ -19,21 +18,10 @@ string ReadLine() {
 }
 
 int ReadLineWithNumber() {
-    int result = 0;
-    cin >> result >> ws;
+    int result;
+    cin >> result;
+    ReadLine();
     return result;
-}
-
-vector<int> ReadLineWithNumbers() {
-    int n;
-    cin >> n;
-
-    vector<int> numbers(n);
-    for (auto& number : numbers) {
-        cin >> number;
-    }
-    cin >> ws;
-    return numbers;
 }
 
 vector<string> SplitIntoWords(const string& text) {
@@ -56,10 +44,18 @@ vector<string> SplitIntoWords(const string& text) {
     return words;
 }
 
+enum class DocumentStatus {
+    ACTUAL,
+    IRRELEVANT,
+    BANNED,
+    REMOVED,
+};
+
 struct Document {
     int id;
-    double relevance;
     int rating;
+    double relevance;
+    DocumentStatus status;
 };
 
 class SearchServer {
@@ -69,52 +65,84 @@ public:
             stop_words_.insert(word);
         }
     }
-    
-    void AddDocument(int document_id, const string& document,
-                    const vector<int>& ratings) {
-        ++document_count_;
-        auto words = SplitIntoWordsNoStop(document);
-        for (const auto& word : words) {
-            if (word_to_document_relevance_[word].count(document_id)) {
-                continue;
-            }
-            double tf = CalculateTF(words, word);
-            word_to_document_relevance_[word].insert({document_id, tf});
+
+    void AddDocument(int document_id, const string& document, DocumentStatus status,
+                     const vector<int>& ratings) {
+        const vector<string> words = SplitIntoWordsNoStop(document);
+        const double inv_word_count = words.size() > 0 ? 1.0 / words.size() : 0;
+        for (const string& word : words) {
+            word_to_document_freqs_[word][document_id] += inv_word_count;
         }
-
-        document_rating_[document_id] = ComputeAverageRating(ratings);
+        documents_.emplace(document_id, DocumentData{ComputeAverageRating(ratings), status});
     }
-    
-    vector<Document> FindTopDocuments(const string& raw_query) const {
-        const Query query_words = ParseQuery(raw_query);
-        auto matched_documents = FindAllDocuments(query_words);
 
-        
+    template <typename Key>
+    vector<Document> FindTopDocuments(const string& raw_query, Key key) const {
+        const Query query = ParseQuery(raw_query);
+        auto matched_documents = FindAllDocuments(query, key);
+
         sort(matched_documents.begin(), matched_documents.end(),
-             [](const Document& lhs, const Document& rhs) {
-                 return lhs.relevance > rhs.relevance;
-             });
-        
+            [](const Document& lhs, const Document& rhs) {
+                if (abs(lhs.relevance - rhs.relevance) < 1e-6) {
+                    return lhs.rating > rhs.rating;
+                } else {
+                    return lhs.relevance > rhs.relevance;
+                }
+                return false;
+            }
+        );
         if (matched_documents.size() > MAX_RESULT_DOCUMENT_COUNT) {
             matched_documents.resize(MAX_RESULT_DOCUMENT_COUNT);
         }
         return matched_documents;
     }
+    
+    vector<Document> FindTopDocuments(const string& raw_query,
+                     DocumentStatus status = DocumentStatus::ACTUAL) const {
+        return FindTopDocuments(raw_query,
+            [=](int document_id, DocumentStatus l_status, int rating) { 
+                return l_status == status;
+            }
+        );
+    }
 
-    int GetDocumentRating(int document_id) {
-        return document_rating_[document_id];
+    int GetDocumentCount() const {
+        return documents_.size();
+    }
+
+    tuple<vector<string>, DocumentStatus> MatchDocument(const string& raw_query,
+                                                        int document_id) const {
+        const Query query = ParseQuery(raw_query);
+        vector<string> matched_words;
+        for (const string& word : query.plus_words) {
+            if (word_to_document_freqs_.count(word) == 0) {
+                continue;
+            }
+            if (word_to_document_freqs_.at(word).count(document_id)) {
+                matched_words.push_back(word);
+            }
+        }
+        for (const string& word : query.minus_words) {
+            if (word_to_document_freqs_.count(word) == 0) {
+                continue;
+            }
+            if (word_to_document_freqs_.at(word).count(document_id)) {
+                matched_words.clear();
+                break;
+            }
+        }
+        return {matched_words, documents_.at(document_id).status};
     }
 
 private:
-    struct Query {
-        set<string> plus_words;
-        set<string> minus_words;
+    struct DocumentData {
+        int rating;
+        DocumentStatus status;
     };
-    
-    map<string, map<int, double>> word_to_document_relevance_;
-    map<int, int> document_rating_;
+
     set<string> stop_words_;
-    int document_count_ = 0;
+    map<string, map<int, double>> word_to_document_freqs_;
+    map<int, DocumentData> documents_;
 
     bool IsStopWord(const string& word) const {
         return stop_words_.count(word) > 0;
@@ -130,91 +158,120 @@ private:
         return words;
     }
 
-    static bool IsMinusWord(const string& word) {
-        return !word.empty() && word[0] == '-';
+    static int ComputeAverageRating(const vector<int>& ratings) {
+        if (ratings.empty()) {
+            return 0;
+        }
+        int rating_sum = 0;
+        for (const int rating : ratings) {
+            rating_sum += rating;
+        }
+        return rating_sum / static_cast<int>(ratings.size());
     }
+
+    struct QueryWord {
+        string data;
+        bool is_minus;
+        bool is_stop;
+    };
+
+    QueryWord ParseQueryWord(string text) const {
+        bool is_minus = false;
+        if (text.size() > 0) {
+            if (text[0] == '-') {
+                is_minus = true;
+                text = text.substr(1);
+            }
+        }
+        return {text, is_minus, IsStopWord(text)};
+    }
+
+    struct Query {
+        set<string> plus_words;
+        set<string> minus_words;
+    };
 
     Query ParseQuery(const string& text) const {
         Query query;
-        for (const string& word : SplitIntoWordsNoStop(text)) {
-            if (IsMinusWord(word)) {
-                query.minus_words.insert(word.substr(1));
-            } else {
-                query.plus_words.insert(word);
+        for (const string& word : SplitIntoWords(text)) {
+            const QueryWord query_word = ParseQueryWord(word);
+            if (!query_word.is_stop) {
+                if (query_word.is_minus) {
+                    query.minus_words.insert(query_word.data);
+                } else {
+                    query.plus_words.insert(query_word.data);
+                }
             }
         }
         return query;
     }
-    
-    static int ComputeAverageRating(const vector<int>& ratings) {
-        if (!ratings.size()) {
-            return 0;
+
+    double ComputeWordInverseDocumentFreq(const string& word) const {
+        if (word_to_document_freqs_.at(word).size() > 0) {
+            return log(GetDocumentCount() * 1.0 / word_to_document_freqs_.at(word).size());
         }
-        return accumulate(ratings.begin(), ratings.end(), 0)
-        / static_cast<int>(ratings.size());
     }
 
-    static double CalculateTF(const vector<string>& words, const string& word) {
-        return static_cast<double>(count(
-                words.begin(), words.end(), word)) / words.size();
-    }
-
-    double CalculateIDF(const string& word) const {
-        return log(static_cast<double>(document_count_)
-        / word_to_document_relevance_.at(word).size());
-    }
-
-    vector<Document> FindAllDocuments(const Query& query) const {
+    template<typename Key>
+    vector<Document> FindAllDocuments(const Query& query, Key key) const {
         map<int, double> document_to_relevance;
-        for (const auto& plus_word : query.plus_words) {
-            if (word_to_document_relevance_.count(plus_word)) {
-                for (const auto& [id, tf] : word_to_document_relevance_.at(plus_word)) {
-                    double idf = CalculateIDF(plus_word);
-                    document_to_relevance[id] += idf * tf;
-                }
+        for (const string& word : query.plus_words) {
+            if (word_to_document_freqs_.count(word) == 0) {
+                continue;
+            }
+            const double inverse_document_freq = ComputeWordInverseDocumentFreq(word);
+            for (const auto &[document_id, term_freq] : word_to_document_freqs_.at(word)) {
+                document_to_relevance[document_id] += term_freq * inverse_document_freq;
             }
         }
 
-        for (const auto& minus_word : query.minus_words) {
-            if (word_to_document_relevance_.count(minus_word)) {
-                for (const auto& [id, rel] : word_to_document_relevance_.at(minus_word)) {
-                    document_to_relevance.erase(id);
-                }
+        for (const string& word : query.minus_words) {
+            if (word_to_document_freqs_.count(word) == 0) {
+                continue;
+            }
+            for (const auto &[document_id, _] : word_to_document_freqs_.at(word)) {
+                document_to_relevance.erase(document_id);
             }
         }
-        
-        vector<Document> documents;
-        for (const auto& [id, relevance] : document_to_relevance) {
-            documents.push_back({id, relevance, document_rating_.at(id)});
+
+        vector<Document> matched_documents;
+        for (const auto &[document_id, relevance] : document_to_relevance) {
+            if (key(document_id,
+                documents_.at(document_id).status, 
+                documents_.at(document_id).rating)) {
+                matched_documents.push_back(
+                    {document_id, documents_.at(document_id).rating, relevance, documents_.at(document_id).status});
+            }
         }
-        
-        return documents;
+        return matched_documents;
     }
 };
 
-SearchServer CreateSearchServer() {
-    SearchServer search_server;
-    search_server.SetStopWords(ReadLine());
-
-    const int document_count = ReadLineWithNumber();
-    for (int document_id = 0; document_id < document_count; ++document_id) {
-        string text = ReadLine();
-
-        vector<int> ratings = ReadLineWithNumbers();
-        search_server.AddDocument(document_id, text, ratings);
-    }
-    return search_server;
+void PrintDocument(const Document& document) {
+    cout << "{ "s
+         << "document_id = "s << document.id << ", "s
+         << "relevance = "s << document.relevance << ", "s
+         << "rating = "s << document.rating << " }"s << endl;
 }
 
 int main() {
-    const SearchServer search_server = CreateSearchServer();
-
-    const string query = ReadLine();
-    for (const auto& [document_id, relevance, rating] : search_server.FindTopDocuments(query)) {
-        cout << "{ document_id = "s << document_id << ", "s
-             << "relevance = "s << relevance << ", "s
-             << "rating = " << rating << " }"s << endl;
+    SearchServer search_server;
+    search_server.SetStopWords("и в на"s);
+    search_server.AddDocument(0, "белый кот и модный ошейник"s,        DocumentStatus::ACTUAL, {8, -3});
+    search_server.AddDocument(1, "пушистый кот пушистый хвост"s,       DocumentStatus::ACTUAL, {7, 2, 7});
+    search_server.AddDocument(2, "ухоженный пёс выразительные глаза"s, DocumentStatus::ACTUAL, {5, -12, 2, 1});
+    search_server.AddDocument(3, "ухоженный скворец евгений"s,         DocumentStatus::BANNED, {9});
+    cout << "ACTUAL by default:"s << endl;
+    for (const Document& document : search_server.FindTopDocuments("пушистый ухоженный кот"s)) {
+        PrintDocument(document);
     }
-
+    cout << "BANNED:"s << endl;
+    for (const Document& document : search_server.FindTopDocuments("пушистый ухоженный кот"s, DocumentStatus::BANNED)) {
+        PrintDocument(document);
+    }
+    cout << "Even ids:"s << endl;
+    for (const Document& document : search_server.FindTopDocuments("пушистый ухоженный кот"s, [](int document_id, DocumentStatus status, int rating) { return document_id % 2 == 0; })) {
+        PrintDocument(document);
+    }
     return 0;
 }
