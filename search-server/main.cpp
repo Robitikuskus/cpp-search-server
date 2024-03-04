@@ -11,7 +11,7 @@
 using namespace std;
 
 const int MAX_RESULT_DOCUMENT_COUNT = 5;
-const int ACCURACY = 1e-6;
+const double ACCURACY = 1e-6;
 
 string ReadLine() {
     string s;
@@ -53,19 +53,57 @@ enum class DocumentStatus {
     REMOVED,
 };
 
+ostream& operator<<(ostream& out, const DocumentStatus& status) {
+    switch (status) {
+        case DocumentStatus::ACTUAL:
+            out << "ACTUAL";
+            break;
+        
+        case DocumentStatus::BANNED:
+            out << "BANNED";
+            break;
+
+        case DocumentStatus::IRRELEVANT:
+            out << "IRRELEVANT";
+            break;
+
+        case DocumentStatus::REMOVED:
+            out << "REMOVED";
+
+        default:
+            break;
+    }
+
+    return out;
+}
+
 struct Document {
-    int id;
-    int rating;
-    double relevance;
-    DocumentStatus status;
+    int id = 0;
+    double relevance = 0.0;
+    int rating = 0;
+    DocumentStatus status = DocumentStatus::ACTUAL;
+    
+    Document() = default;
+    
+    explicit Document(int document_id, double document_relevance, int document_rating,
+             DocumentStatus document_status = DocumentStatus::ACTUAL)
+        : id(document_id),
+        relevance(document_relevance),
+        rating(document_rating),
+        status(document_status) {}
 };
 
 class SearchServer {
 public:
-    void SetStopWords(const string& text) {
-        for (const string& word : SplitIntoWords(text)) {
-            stop_words_.insert(word);
-        }
+    SearchServer() = default;
+    
+    explicit SearchServer(const string& text) {
+        SetStopWords(SplitIntoWords(text));
+    }
+    
+    template<typename StringsContainer>
+    explicit SearchServer(const StringsContainer& words) {
+        SetStopWords(words);
     }
 
     void AddDocument(int document_id, const string& document, DocumentStatus status,
@@ -75,7 +113,7 @@ public:
         for (const string& word : words) {
             word_to_document_freqs_[word][document_id] += inv_word_count;
         }
-        documents_.emplace(document_id, DocumentData{ComputeAverageRating(ratings), status});
+        documents_.emplace(document_id, DocumentData(ComputeAverageRating(ratings), status));
     }
 
     template <typename Key>
@@ -138,13 +176,28 @@ public:
 
 private:
     struct DocumentData {
-        int rating;
-        DocumentStatus status;
+        int rating = 0;
+        DocumentStatus status = DocumentStatus::ACTUAL;
+
+        DocumentData() = default;
+
+        explicit DocumentData(int document_rating, DocumentStatus document_status)
+        : rating(document_rating)
+        , status(document_status) {}
     };
 
     set<string> stop_words_;
     map<string, map<int, double>> word_to_document_freqs_;
     map<int, DocumentData> documents_;
+    
+    template <typename StringsContainer>
+    void SetStopWords(const StringsContainer& words) {
+        for (const auto& word : words) {
+            if (!word.empty()) {
+                stop_words_.insert(word);
+            }
+        }
+    }
 
     bool IsStopWord(const string& word) const {
         return stop_words_.count(word) > 0;
@@ -164,8 +217,7 @@ private:
         if (ratings.empty()) {
             return 0;
         }
-        return accumulate(ratings.begin(), ratings.end(), 0.0)
-                          / static_cast<int>(ratings.size());
+        return accumulate(ratings.begin(), ratings.end(), 0) / static_cast<int>(ratings.size());
     }
 
     struct QueryWord {
@@ -209,6 +261,7 @@ private:
         if (word_to_document_freqs_.at(word).size() > 0) {
             return log(GetDocumentCount() * 1.0 / word_to_document_freqs_.at(word).size());
         }
+        return 0;
     }
 
     template<typename Key>
@@ -239,7 +292,7 @@ private:
                 documents_.at(document_id).status, 
                 documents_.at(document_id).rating)) {
                 matched_documents.push_back(
-                    {document_id, documents_.at(document_id).rating, relevance, documents_.at(document_id).status});
+                    Document(document_id, relevance, documents_.at(document_id).rating, documents_.at(document_id).status));
             }
         }
         return matched_documents;
@@ -254,12 +307,12 @@ void PrintDocument(const Document& document) {
 }
 
 int main() {
-    SearchServer search_server;
-    search_server.SetStopWords("и в на"s);
+    SearchServer search_server("и в на"s);
     search_server.AddDocument(0, "белый кот и модный ошейник"s,        DocumentStatus::ACTUAL, {8, -3});
     search_server.AddDocument(1, "пушистый кот пушистый хвост"s,       DocumentStatus::ACTUAL, {7, 2, 7});
     search_server.AddDocument(2, "ухоженный пёс выразительные глаза"s, DocumentStatus::ACTUAL, {5, -12, 2, 1});
     search_server.AddDocument(3, "ухоженный скворец евгений"s,         DocumentStatus::BANNED, {9});
+
     cout << "ACTUAL by default:"s << endl;
     for (const Document& document : search_server.FindTopDocuments("пушистый ухоженный кот"s)) {
         PrintDocument(document);
@@ -269,8 +322,12 @@ int main() {
         PrintDocument(document);
     }
     cout << "Even ids:"s << endl;
-    for (const Document& document : search_server.FindTopDocuments("пушистый ухоженный кот"s, [](int document_id, DocumentStatus status, int rating) { return document_id % 2 == 0; })) {
+    for (const Document& document : search_server.FindTopDocuments("пушистый ухоженный кот"s, 
+                                                                  [](int document_id, DocumentStatus status, int rating) {
+                                                                      return document_id % 2 == 0;
+                                                                  })) {
         PrintDocument(document);
     }
+
     return 0;
 }
