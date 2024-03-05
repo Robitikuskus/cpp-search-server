@@ -70,8 +70,6 @@ enum class DocumentStatus {
 
 class SearchServer {
 public:
-    inline static constexpr int INVALID_DOCUMENT_ID = -1;
-
     template <typename StringContainer>
     explicit SearchServer(const StringContainer& stop_words)
         : stop_words_(MakeUniqueNonEmptyStrings(stop_words)) {
@@ -85,22 +83,15 @@ public:
     explicit SearchServer(const string& stop_words_text)
         : SearchServer(
             SplitIntoWords(stop_words_text)) {
-        for (const auto& word : stop_words_) {
-            if (!IsValidWord(word)) {
-                throw invalid_argument("Stop word contains invalid symbol"s);
-            }
-        }
     }
 
     void AddDocument(int document_id, const string& document, DocumentStatus status,
                                     const vector<int>& ratings) {
-
-        if (!IsValidWord(document)){
-            throw invalid_argument("Document text contains invalid symbol"s);
+        if (document_id < 0) {
+            throw invalid_argument("Document id is less than zero"s);
         }
-
-        if (document_id < 0 || documents_.count(document_id) > 0) {
-            throw invalid_argument("Invalid document id"s);
+        if (documents_.count(document_id)) {
+            throw invalid_argument("Document id is greater than documents count"s);
         }
         
         const vector<string> words = SplitIntoWordsNoStop(document);
@@ -117,16 +108,7 @@ public:
     template <typename DocumentPredicate>
     vector<Document> FindTopDocuments(const string& raw_query,
                                       DocumentPredicate document_predicate) const {      
-        const auto query = ParseQuery(raw_query);                
-        if (!IsValidWord(raw_query)){
-            throw invalid_argument("Query contains invalid symbol"s);
-        }
-
-        for (const auto& word : query.minus_words) {
-            if (word.size() == 0 || word[0] == '-') {
-                throw invalid_argument("Invalid query"s);
-            }
-        }
+        const auto query = ParseQuery(raw_query);
         
         auto matched_documents = FindAllDocuments(query, document_predicate);
 
@@ -162,15 +144,6 @@ public:
     tuple<vector<string>, DocumentStatus> MatchDocument(const string& raw_query,
                                     int document_id) const {
         auto query = ParseQuery(raw_query);
-        if (!IsValidWord(raw_query)){
-            throw invalid_argument("Query contains invalid symbol"s);
-        }
-
-        for (const auto& word : query.minus_words) {
-            if (word.size() == 0 || word[0] == '-') {
-                throw invalid_argument("Invalid query"s);
-            }
-        }
         
         vector<string> matched_words;
         for (const string& word : query.plus_words) {
@@ -219,6 +192,10 @@ private:
     }
 
     vector<string> SplitIntoWordsNoStop(const string& text) const {
+        if (!IsValidWord(text)){
+            throw invalid_argument("Document text contains invalid symbol"s);
+        }
+
         vector<string> words;
         for (const string& word : SplitIntoWords(text)) {
             if (!IsStopWord(word)) {
@@ -254,6 +231,12 @@ private:
                 is_minus = true;
                 text = text.substr(1);
             }
+        }
+        if (text.size() == 0 || text[0] == '-') {
+                throw invalid_argument("Invalid query"s);
+        }
+        if (!IsValidWord(text)) {
+            throw invalid_argument("Text contains invalid symbol"s);
         }
         return {text, is_minus, IsStopWord(text)};
     }
