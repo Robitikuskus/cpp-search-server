@@ -1,4 +1,5 @@
 #include "search_server.h"
+#include "string_processing.h"
 
 using namespace std::literals;
 
@@ -20,11 +21,17 @@ void SearchServer::AddDocument(int document_id, const std::string& document,
     document_ids_.push_back(document_id);
 }
 
-std::vector<Document> SearchServer::FindTopDocuments(const std::string& raw_query,
-    DocumentStatus status = DocumentStatus::ACTUAL) const {
+std::vector<Document> SearchServer::FindTopDocuments(const std::string& raw_query, DocumentStatus status) const {
     return FindTopDocuments(raw_query,
         [status](int document_id, DocumentStatus document_status, int rating) {
             return document_status == status;
+        });
+}
+
+std::vector<Document> SearchServer::FindTopDocuments(const std::string& raw_query) const {
+    return FindTopDocuments(raw_query,
+        [](int document_id, DocumentStatus document_status, int rating) {
+            return document_status == DocumentStatus::ACTUAL;
         });
 }
 
@@ -66,7 +73,7 @@ bool SearchServer::IsStopWord(const std::string& word) const {
     return stop_words_.count(word) > 0;
 }
 
-static bool IsValidWord(const std::string& word) {
+bool SearchServer::IsValidWord(const std::string& word) {
     return none_of(word.begin(), word.end(), [](char c) {
         return c >= '\0' && c < ' ';
     });
@@ -110,7 +117,7 @@ SearchServer::QueryWord SearchServer::ParseQueryWord(const std::string& text) co
         word = word.substr(1);
     }
 
-    if (word.empty() || word[0] == '-' || !IsValidWord(word)) {
+    if (word.empty() || word[0] == '-' || !SearchServer::IsValidWord(word)) {
         throw std::invalid_argument("Query word "s + text + " is invalid");
     }
 

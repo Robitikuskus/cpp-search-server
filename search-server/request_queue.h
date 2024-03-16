@@ -32,8 +32,9 @@ public:
         return result;
     }
 
-    std::vector<Document> AddFindRequest(const std::string& raw_query,
-            DocumentStatus status = DocumentStatus::ACTUAL);
+    std::vector<Document> AddFindRequest(const std::string& raw_query, DocumentStatus status);
+
+    std::vector<Document> AddFindRequest(const std::string& raw_query);
 
     int GetNoResultRequests() const;
 

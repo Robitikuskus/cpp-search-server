@@ -1,10 +1,11 @@
 #pragma once
 
 #include <vector>
+#include "iterator_range.h"
 
 template <typename Iterator>
 class Paginator {
-    vector<IteratorRange<Iterator>> ranges;
+    std::vector<IteratorRange<Iterator>> ranges;
 
 public:
     Paginator(Iterator begin, Iterator end, int page_size) {
