@@ -13,7 +13,7 @@ void SearchServer::AddDocument(int document_id, const std::string& document,
     }
     const auto words = SplitIntoWordsNoStop(document);
 
-    const double inv_word_count = 1.0 / words.size();
+    const double inv_word_count = 1.0 / static_cast<double>(words.size());
     for (const std::string& word : words) {
         word_to_document_freqs_[word][document_id] += inv_word_count;
     }
@@ -23,24 +23,24 @@ void SearchServer::AddDocument(int document_id, const std::string& document,
 
 std::vector<Document> SearchServer::FindTopDocuments(const std::string& raw_query, DocumentStatus status) const {
     return FindTopDocuments(raw_query,
-        [status](int document_id, DocumentStatus document_status, int rating) {
+        [status](int, DocumentStatus document_status, int) {
             return document_status == status;
         });
 }
 
 std::vector<Document> SearchServer::FindTopDocuments(const std::string& raw_query) const {
     return FindTopDocuments(raw_query,
-        [](int document_id, DocumentStatus document_status, int rating) {
+        [](int, DocumentStatus document_status, int) {
             return document_status == DocumentStatus::ACTUAL;
         });
 }
 
-int SearchServer::GetDocumentCount() const {
+size_t SearchServer::GetDocumentCount() const {
     return documents_.size();
 }
 
 int SearchServer::GetDocumentId(int index) const {
-    return document_ids_.at(index);
+    return document_ids_.at(static_cast<size_t>(index));
 }
 
 std::tuple<std::vector<std::string>, DocumentStatus> SearchServer::MatchDocument(
@@ -143,6 +143,7 @@ double SearchServer::ComputeWordInverseDocumentFreq(const std::string& word) con
     if (word_to_document_freqs_.at(word).size() == 0) {
         return 0;
     }
-    return log(GetDocumentCount() * 1.0 / word_to_document_freqs_.at(word).size());
+    return log(static_cast<double>(GetDocumentCount())
+            / static_cast<double>(word_to_document_freqs_.at(word).size()));
 }
 

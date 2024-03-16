@@ -2,14 +2,14 @@
 
 std::vector<Document> RequestQueue::AddFindRequest(const std::string& raw_query, DocumentStatus status) {
     return AddFindRequest(raw_query,
-        [status](int document_id, DocumentStatus document_status, int rating) {
+        [status](int, DocumentStatus document_status, int) {
             return document_status == status;
         });
 }
 
 std::vector<Document> RequestQueue::AddFindRequest(const std::string& raw_query) {
     return AddFindRequest(raw_query,
-        [](int document_id, DocumentStatus document_status, int rating) {
+        [](int, DocumentStatus document_status, int) {
             return document_status == DocumentStatus::ACTUAL;
         });
 }

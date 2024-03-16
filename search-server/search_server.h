@@ -34,7 +34,7 @@ public:
 
     std::vector<Document> FindTopDocuments(const std::string& raw_query) const;
 
-    int GetDocumentCount() const;
+    size_t GetDocumentCount() const;
 
     int GetDocumentId(int index) const;
 
