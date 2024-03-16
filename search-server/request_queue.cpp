@@ -14,6 +14,6 @@ std::vector<Document> RequestQueue::AddFindRequest(const std::string& raw_query)
         });
 }
 
-int RequestQueue::GetNoResultRequests() const {
+size_t RequestQueue::GetNoResultRequests() const {
     return requests_.size();
 }
